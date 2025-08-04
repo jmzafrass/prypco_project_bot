@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# macOS
+.DS_Store
+
+# IDE - VSCode
+.vscode/
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iml
+
+# Testing
+coverage/
+
+# Temporary files
+tmp/
+temp/
+
+# Build outputs
+dist/
+build/

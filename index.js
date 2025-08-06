@@ -1498,6 +1498,15 @@ process.on('SIGINT', async () => {
     
     console.log('⚡️ Slack bot is running in HTTP mode!');
     console.log(`📡 Listening on 0.0.0.0:${port}`);
+    
+    // Log all registered routes for debugging
+    console.log('📋 Registered routes:');
+    receiver.router._router.stack.forEach((layer) => {
+      if (layer.route) {
+        const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
+        console.log(`   ${methods} ${layer.route.path}`);
+      }
+    });
     console.log('🔗 Configure your Slack app with these URLs:');
     console.log(`   - Slash Commands: https://YOUR_RAILWAY_URL/slack/commands`);
     console.log(`   - Event Subscriptions: https://YOUR_RAILWAY_URL/slack/events`);

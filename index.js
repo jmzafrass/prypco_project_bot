@@ -1474,11 +1474,14 @@ process.on('SIGINT', () => {
       // Don't exit immediately to allow health checks to work
     }
     
-    // Start the Slack app
-    await app.start(port);
+    // Start the Slack app - bind to all interfaces (0.0.0.0) for Railway
+    await app.start({
+      port: port,
+      host: '0.0.0.0'  // Important for Railway!
+    });
     
     console.log('⚡️ Slack bot is running in HTTP mode!');
-    console.log(`📡 Listening on port ${port}`);
+    console.log(`📡 Listening on 0.0.0.0:${port}`);
     console.log('🔗 Configure your Slack app with these URLs:');
     console.log(`   - Slash Commands: https://YOUR_RAILWAY_URL/slack/commands`);
     console.log(`   - Event Subscriptions: https://YOUR_RAILWAY_URL/slack/events`);

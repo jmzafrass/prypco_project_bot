@@ -1441,14 +1441,36 @@ process.on('uncaughtException', (error) => {
 });
 
 // Graceful shutdown handling
-process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  process.exit(0);
+let isShuttingDown = false;
+
+process.on('SIGTERM', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  console.log('SIGTERM signal received: closing HTTP server gracefully');
+  try {
+    await app.stop();
+    console.log('Slack app stopped successfully');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
 });
 
-process.on('SIGINT', () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  process.exit(0);
+process.on('SIGINT', async () => {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  console.log('SIGINT signal received: closing HTTP server gracefully');
+  try {
+    await app.stop();
+    console.log('Slack app stopped successfully');
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
 });
 
 // ===== START THE APP =====
@@ -1492,11 +1514,6 @@ process.on('SIGINT', () => {
     } else {
       console.warn('⚠️  Airtable base ID not configured');
     }
-    
-    // Keep the process alive
-    setInterval(() => {
-      // Heartbeat to keep the process running
-    }, 1000 * 60 * 60); // Every hour
     
   } catch (error) {
     console.error('Failed to start app:', error);

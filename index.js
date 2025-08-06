@@ -1499,13 +1499,19 @@ process.on('SIGINT', async () => {
     console.log('⚡️ Slack bot is running in HTTP mode!');
     console.log(`📡 Listening on 0.0.0.0:${port}`);
     
-    // Log all registered routes for debugging
-    console.log('📋 Registered routes:');
-    receiver.router._router.stack.forEach((layer) => {
-      if (layer.route) {
-        const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
-        console.log(`   ${methods} ${layer.route.path}`);
+    // Test if /slack/commands route exists by making a simple GET request
+    console.log('🔍 Testing Slack routes...');
+    receiver.router.get('/debug-routes', (req, res) => {
+      const routes = [];
+      if (receiver.router && receiver.router.stack) {
+        receiver.router.stack.forEach((layer) => {
+          if (layer.route) {
+            const methods = Object.keys(layer.route.methods).join(',').toUpperCase();
+            routes.push(`${methods} ${layer.route.path}`);
+          }
+        });
       }
+      res.json({ routes });
     });
     console.log('🔗 Configure your Slack app with these URLs:');
     console.log(`   - Slash Commands: https://YOUR_RAILWAY_URL/slack/commands`);
@@ -1520,9 +1526,7 @@ process.on('SIGINT', async () => {
     
   } catch (error) {
     console.error('Failed to start app:', error);
-    // Still start the Express server for health checks
-    const port = process.env.PORT || 3000;
-    receiver.start(port);
-    console.log(`📡 Health check server running on port ${port} (Slack features unavailable)`);
+    console.log('📡 Health check server available at health endpoints only (Slack features unavailable)');
+    // Don't try to start receiver again - it's already started by app.start()
   }
 })();

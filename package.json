@@ -5,6 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "start:test": "node test-server.js",
+    "start:railway": "node index-railway.js",
     "start:simple": "node index-simple.js",
     "dev": "nodemon index.js",
     "test": "echo \"Error: no test specified\" && exit 1"

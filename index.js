@@ -11,16 +11,13 @@ const receiver = new ExpressReceiver({
 });
 
 // Add health check endpoints BEFORE initializing the Slack app
+// Railway uses healthcheck.railway.app hostname for health checks
 receiver.router.get('/', (req, res) => {
   res.status(200).send('Slack bot is running! 🤖');
 });
 
 receiver.router.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'healthy', 
-    service: 'slack-bot',
-    timestamp: new Date().toISOString()
-  });
+  res.status(200).send('OK');
 });
 
 // Add a test endpoint
@@ -1496,11 +1493,8 @@ process.on('SIGINT', async () => {
       // Don't exit immediately to allow health checks to work
     }
     
-    // Start the Slack app - bind to all interfaces (0.0.0.0) for Railway
-    await app.start({
-      port: port,
-      host: '0.0.0.0'  // Important for Railway!
-    });
+    // Start the Slack app - Railway requires using PORT env var
+    await app.start(port);
     
     console.log('⚡️ Slack bot is running in HTTP mode!');
     console.log(`📡 Listening on 0.0.0.0:${port}`);

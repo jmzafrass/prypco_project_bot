@@ -1,15 +1,49 @@
 // index.js - Enhanced Slack Bot with Airtable Integration
 require('dotenv').config();
-const { App } = require('@slack/bolt');
+const { App, ExpressReceiver } = require('@slack/bolt');
 const fetch = require('node-fetch');
 
-// Initialize Slack app
-const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: true, // Using Socket Mode for easier local development
-  appToken: process.env.SLACK_APP_TOKEN // Required for Socket Mode
+// Create a custom Express receiver for better control
+const receiver = new ExpressReceiver({
+  signingSecret: process.env.SLACK_SIGNING_SECRET || 'dummy-secret-for-health-check',
+  // Process events immediately (don't queue)
+  processBeforeResponse: true
 });
+
+// Add health check endpoints BEFORE initializing the Slack app
+receiver.router.get('/', (req, res) => {
+  res.status(200).send('Slack bot is running! 🤖');
+});
+
+receiver.router.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'healthy', 
+    service: 'slack-bot',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Add a test endpoint
+receiver.router.get('/test', (req, res) => {
+  res.status(200).json({
+    message: 'Server is running',
+    env: {
+      has_slack_token: !!process.env.SLACK_BOT_TOKEN,
+      has_signing_secret: !!process.env.SLACK_SIGNING_SECRET,
+      has_airtable_base: !!process.env.AIRTABLE_BASE_ID,
+      port: process.env.PORT || 3000
+    }
+  });
+});
+
+// Initialize Slack app with custom receiver
+const app = new App({
+  token: process.env.SLACK_BOT_TOKEN || 'xoxb-dummy-token',
+  receiver,
+  // Add logging
+  logLevel: process.env.LOG_LEVEL || 'info'
+});
+
 
 // Airtable configuration
 const AIRTABLE_BASE = process.env.AIRTABLE_BASE_ID;
@@ -1392,17 +1426,80 @@ app.action('projects_prev_page', async ({ ack, body, action, client }) => {
   }
 });
 
+// ===== ERROR HANDLING =====
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit the process
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  // Don't exit the process unless it's critical
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+  console.log('SIGTERM signal received: closing HTTP server');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT signal received: closing HTTP server');
+  process.exit(0);
+});
+
 // ===== START THE APP =====
 
 (async () => {
   try {
-    await app.start(process.env.PORT || 3000);
-    console.log('⚡️ Slack bot is running!');
-    console.log(`📡 Listening on port ${process.env.PORT || 3000}`);
-    console.log('🔗 Make sure to configure your Slack app URLs');
-    console.log('📊 Connected to Airtable base:', AIRTABLE_BASE);
+    const port = process.env.PORT || 3000;
+    
+    // Validate required environment variables
+    const requiredEnvVars = [
+      'SLACK_BOT_TOKEN',
+      'SLACK_SIGNING_SECRET',
+      'AIRTABLE_BASE_ID',
+      'AIRTABLE_API_KEY',
+      'AIRTABLE_PROJECTS_TABLE_ID',
+      'AIRTABLE_EMPLOYEES_TABLE_ID'
+    ];
+    
+    const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+    if (missingVars.length > 0) {
+      console.error('❌ Missing required environment variables:', missingVars.join(', '));
+      console.error('Please set all required environment variables in Railway');
+      // Don't exit immediately to allow health checks to work
+    }
+    
+    // Start the Slack app
+    await app.start(port);
+    
+    console.log('⚡️ Slack bot is running in HTTP mode!');
+    console.log(`📡 Listening on port ${port}`);
+    console.log('🔗 Configure your Slack app with these URLs:');
+    console.log(`   - Slash Commands: https://YOUR_RAILWAY_URL/slack/commands`);
+    console.log(`   - Event Subscriptions: https://YOUR_RAILWAY_URL/slack/events`);
+    console.log(`   - Interactivity: https://YOUR_RAILWAY_URL/slack/events`);
+    
+    if (AIRTABLE_BASE) {
+      console.log('📊 Connected to Airtable base:', AIRTABLE_BASE);
+    } else {
+      console.warn('⚠️  Airtable base ID not configured');
+    }
+    
+    // Keep the process alive
+    setInterval(() => {
+      // Heartbeat to keep the process running
+    }, 1000 * 60 * 60); // Every hour
+    
   } catch (error) {
     console.error('Failed to start app:', error);
-    process.exit(1);
+    // Still start the Express server for health checks
+    const port = process.env.PORT || 3000;
+    receiver.start(port);
+    console.log(`📡 Health check server running on port ${port} (Slack features unavailable)`);
   }
 })();

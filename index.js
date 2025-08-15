@@ -169,9 +169,14 @@ async function searchProjects(searchTerm, filters = {}) {
   // Add Slack ID filter - for filtering by current user's Slack ID
   if (filters.slackUserId) {
     console.log('Filtering by Slack ID:', filters.slackUserId);
-    // Use REGEX_MATCH for robust matching in comma-separated lists
-    // This handles: start of string, after comma+space, before comma, end of string
-    filterFormulas.push(`REGEX_MATCH({Slack IDs}, "(^|, )${filters.slackUserId}(,|$)")`);
+    // Handle multiple comma-separated formats with flexible spacing
+    filterFormulas.push(`OR(
+      {Slack IDs} = "${filters.slackUserId}",
+      FIND("${filters.slackUserId},", {Slack IDs}),
+      FIND(", ${filters.slackUserId}",{Slack IDs}),
+      FIND(",${filters.slackUserId}",{Slack IDs}),
+      FIND("${filters.slackUserId} ", {Slack IDs})
+    )`);
   }
   
   // Combine all filters with AND

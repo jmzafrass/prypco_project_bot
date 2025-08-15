@@ -169,14 +169,8 @@ async function searchProjects(searchTerm, filters = {}) {
   // Add Slack ID filter - for filtering by current user's Slack ID
   if (filters.slackUserId) {
     console.log('Filtering by Slack ID:', filters.slackUserId);
-    // Handle multiple comma-separated formats with flexible spacing
-    filterFormulas.push(`OR(
-      {Slack IDs} = "${filters.slackUserId}",
-      FIND("${filters.slackUserId},", {Slack IDs}),
-      FIND(", ${filters.slackUserId}",{Slack IDs}),
-      FIND(",${filters.slackUserId}",{Slack IDs}),
-      FIND("${filters.slackUserId} ", {Slack IDs})
-    )`);
+    // Convert lookup field array to string using &'' then use FIND
+    filterFormulas.push(`FIND("${filters.slackUserId}", {Slack IDs}&'')`);
   }
   
   // Combine all filters with AND

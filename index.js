@@ -332,7 +332,7 @@ app.command('/project', async ({ command, ack, respond, client }) => {
         break;
         
       case 'edit':
-        await showProjectListForEdit(client, command.user_id, searchTerm);
+        await showProjectListForEdit(respond, command.user_id, searchTerm);
         break;
         
       case 'delete':
@@ -486,14 +486,13 @@ async function showFilterModal(client, triggerId, initialSearch = '') {
   });
 }
 
-async function showProjectListForEdit(client, userId, searchTerm = '') {
+async function showProjectListForEdit(respond, userId, searchTerm = '') {
   try {
     const projects = await searchProjects(searchTerm, { slackUserId: userId });
     
     if (projects.length === 0) {
-      await client.chat.postEphemeral({
-        channel: userId,
-        user: userId,
+      await respond({
+        response_type: 'ephemeral',
         text: `No projects found where you are a member${searchTerm ? ` matching "${searchTerm}"` : ''}.`
       });
       return;
@@ -616,16 +615,15 @@ async function showProjectListForEdit(client, userId, searchTerm = '') {
       }
     }
     
-    await client.chat.postMessage({
-      channel: userId,
+    await respond({
+      response_type: 'in_channel',
       blocks
     });
     
   } catch (error) {
     console.error('Edit project list error:', error);
-    await client.chat.postEphemeral({
-      channel: userId,
-      user: userId,
+    await respond({
+      response_type: 'ephemeral',
       text: `❌ Error loading projects: ${error.message}`
     });
   }

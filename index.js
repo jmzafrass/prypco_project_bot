@@ -319,7 +319,7 @@ app.command('/project', async ({ command, ack, respond, client }) => {
         break;
         
       case 'edit':
-        await showProjectList(respond, 'edit', searchTerm, command.user_id);
+        await showProjectListForEdit(client, command.user_id, searchTerm);
         break;
         
       case 'delete':
@@ -471,6 +471,151 @@ async function showFilterModal(client, triggerId, initialSearch = '') {
       ]
     }
   });
+}
+
+async function showProjectListForEdit(client, userId, searchTerm = '') {
+  try {
+    const projects = await searchProjects(searchTerm, { slackUserId: userId });
+    
+    if (projects.length === 0) {
+      await client.chat.postEphemeral({
+        channel: userId,
+        user: userId,
+        text: `No projects found where you are a member${searchTerm ? ` matching "${searchTerm}"` : ''}.`
+      });
+      return;
+    }
+    
+    const blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Found ${projects.length} project(s) where you are a member:*`
+        }
+      },
+      { type: 'divider' }
+    ];
+    
+    // Add filter summary if there's a search term
+    if (searchTerm) {
+      blocks.push({
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: `_Search: "${searchTerm}" • Your projects only_`
+        }]
+      });
+      blocks.push({ type: 'divider' });
+    }
+    
+    // Add projects with pagination
+    const projectsPerPage = 8;
+    const currentPage = 0; // Start with page 0
+    const startIndex = currentPage * projectsPerPage;
+    const endIndex = startIndex + projectsPerPage;
+    const paginatedProjects = projects.slice(startIndex, endIndex);
+    
+    for (const project of paginatedProjects) {
+      const formatted = formatProjectForSlack(project, true); // Use compact format
+      
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: formatted.text },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: '✏️ Edit' },
+          action_id: 'edit_project',
+          value: project.id
+        }
+      });
+      
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '🗑️ Delete' },
+            action_id: 'delete_project',
+            value: project.id,
+            style: 'danger',
+            confirm: {
+              title: { type: 'plain_text', text: 'Confirm Deletion' },
+              text: { type: 'mrkdwn', text: `Are you sure you want to delete *${formatted.initiative}*?` },
+              confirm: { type: 'plain_text', text: 'Delete' },
+              deny: { type: 'plain_text', text: 'Cancel' }
+            }
+          }
+        ]
+      });
+    }
+    
+    // Add pagination info and navigation
+    const totalPages = Math.ceil(projects.length / projectsPerPage);
+    const showingStart = startIndex + 1;
+    const showingEnd = Math.min(endIndex, projects.length);
+    
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: `_Showing ${showingStart}-${showingEnd} of ${projects.length} projects (Page ${currentPage + 1} of ${totalPages})_`
+      }]
+    });
+    
+    // Add navigation buttons if there are multiple pages
+    if (totalPages > 1) {
+      const navigationElements = [];
+      
+      // Previous button (disabled on first page)
+      if (currentPage > 0) {
+        navigationElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: '◀ Previous' },
+          action_id: 'edit_projects_prev_page',
+          value: JSON.stringify({ 
+            searchTerm,
+            slackUserId: userId,
+            page: currentPage - 1
+          })
+        });
+      }
+      
+      // Next button (disabled on last page)
+      if (currentPage < totalPages - 1) {
+        navigationElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: 'Next ▶' },
+          action_id: 'edit_projects_next_page',
+          value: JSON.stringify({ 
+            searchTerm,
+            slackUserId: userId,
+            page: currentPage + 1
+          })
+        });
+      }
+      
+      if (navigationElements.length > 0) {
+        blocks.push({
+          type: 'actions',
+          elements: navigationElements
+        });
+      }
+    }
+    
+    await client.chat.postMessage({
+      channel: userId,
+      blocks
+    });
+    
+  } catch (error) {
+    console.error('Edit project list error:', error);
+    await client.chat.postEphemeral({
+      channel: userId,
+      user: userId,
+      text: `❌ Error loading projects: ${error.message}`
+    });
+  }
 }
 
 async function showProjectList(respond, action, searchTerm = '', slackUserId = null) {
@@ -1482,6 +1627,171 @@ app.action('projects_prev_page', async ({ ack, body, action, client }) => {
     console.error('Previous page error:', error);
   }
 });
+
+// Edit projects pagination handlers
+app.action('edit_projects_next_page', async ({ ack, body, action, client }) => {
+  await ack();
+  
+  try {
+    const { searchTerm, slackUserId, page } = JSON.parse(action.value);
+    await showEditProjectsPage(client, slackUserId, searchTerm, page);
+  } catch (error) {
+    console.error('Edit projects next page error:', error);
+  }
+});
+
+app.action('edit_projects_prev_page', async ({ ack, body, action, client }) => {
+  await ack();
+  
+  try {
+    const { searchTerm, slackUserId, page } = JSON.parse(action.value);
+    await showEditProjectsPage(client, slackUserId, searchTerm, page);
+  } catch (error) {
+    console.error('Edit projects previous page error:', error);
+  }
+});
+
+async function showEditProjectsPage(client, userId, searchTerm, currentPage) {
+  try {
+    const projects = await searchProjects(searchTerm, { slackUserId: userId });
+    
+    if (projects.length === 0) {
+      await client.chat.postEphemeral({
+        channel: userId,
+        user: userId,
+        text: `No projects found where you are a member${searchTerm ? ` matching "${searchTerm}"` : ''}.`
+      });
+      return;
+    }
+    
+    const projectsPerPage = 8;
+    const startIndex = currentPage * projectsPerPage;
+    const endIndex = startIndex + projectsPerPage;
+    const paginatedProjects = projects.slice(startIndex, endIndex);
+    
+    const blocks = [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*Found ${projects.length} project(s) where you are a member:*`
+        }
+      },
+      { type: 'divider' }
+    ];
+    
+    // Add filter summary if there's a search term
+    if (searchTerm) {
+      blocks.push({
+        type: 'context',
+        elements: [{
+          type: 'mrkdwn',
+          text: `_Search: "${searchTerm}" • Your projects only_`
+        }]
+      });
+      blocks.push({ type: 'divider' });
+    }
+    
+    // Add projects
+    for (const project of paginatedProjects) {
+      const formatted = formatProjectForSlack(project, true);
+      
+      blocks.push({
+        type: 'section',
+        text: { type: 'mrkdwn', text: formatted.text },
+        accessory: {
+          type: 'button',
+          text: { type: 'plain_text', text: '✏️ Edit' },
+          action_id: 'edit_project',
+          value: project.id
+        }
+      });
+      
+      blocks.push({
+        type: 'actions',
+        elements: [
+          {
+            type: 'button',
+            text: { type: 'plain_text', text: '🗑️ Delete' },
+            action_id: 'delete_project',
+            value: project.id,
+            style: 'danger',
+            confirm: {
+              title: { type: 'plain_text', text: 'Confirm Deletion' },
+              text: { type: 'mrkdwn', text: `Are you sure you want to delete *${formatted.initiative}*?` },
+              confirm: { type: 'plain_text', text: 'Delete' },
+              deny: { type: 'plain_text', text: 'Cancel' }
+            }
+          }
+        ]
+      });
+    }
+    
+    // Add pagination info and navigation
+    const totalPages = Math.ceil(projects.length / projectsPerPage);
+    const showingStart = startIndex + 1;
+    const showingEnd = Math.min(endIndex, projects.length);
+    
+    blocks.push({
+      type: 'context',
+      elements: [{
+        type: 'mrkdwn',
+        text: `_Showing ${showingStart}-${showingEnd} of ${projects.length} projects (Page ${currentPage + 1} of ${totalPages})_`
+      }]
+    });
+    
+    // Add navigation buttons
+    if (totalPages > 1) {
+      const navigationElements = [];
+      
+      if (currentPage > 0) {
+        navigationElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: '◀ Previous' },
+          action_id: 'edit_projects_prev_page',
+          value: JSON.stringify({ 
+            searchTerm,
+            slackUserId: userId,
+            page: currentPage - 1
+          })
+        });
+      }
+      
+      if (currentPage < totalPages - 1) {
+        navigationElements.push({
+          type: 'button',
+          text: { type: 'plain_text', text: 'Next ▶' },
+          action_id: 'edit_projects_next_page',
+          value: JSON.stringify({ 
+            searchTerm,
+            slackUserId: userId,
+            page: currentPage + 1
+          })
+        });
+      }
+      
+      if (navigationElements.length > 0) {
+        blocks.push({
+          type: 'actions',
+          elements: navigationElements
+        });
+      }
+    }
+    
+    await client.chat.postMessage({
+      channel: userId,
+      blocks
+    });
+    
+  } catch (error) {
+    console.error('Edit projects pagination error:', error);
+    await client.chat.postEphemeral({
+      channel: userId,
+      user: userId,
+      text: `❌ Error loading projects: ${error.message}`
+    });
+  }
+}
 
 // ===== ERROR HANDLING =====
 

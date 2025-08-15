@@ -157,6 +157,11 @@ async function searchProjects(searchTerm, filters = {}) {
     filterFormulas.push(`OR(${ownerFilters.join(', ')})`);
   }
   
+  // Add Slack ID filter - for filtering by current user's Slack ID
+  if (filters.slackUserId) {
+    filterFormulas.push(`FIND("${filters.slackUserId}", {Slack IDs})`);
+  }
+  
   // Combine all filters with AND
   const finalFilter = filterFormulas.length > 0 
     ? `AND(${filterFormulas.join(', ')})` 
@@ -314,7 +319,7 @@ app.command('/project', async ({ command, ack, respond, client }) => {
         break;
         
       case 'edit':
-        await showProjectList(respond, 'edit', searchTerm);
+        await showProjectList(respond, 'edit', searchTerm, command.user_id);
         break;
         
       case 'delete':
@@ -468,15 +473,36 @@ async function showFilterModal(client, triggerId, initialSearch = '') {
   });
 }
 
-async function showProjectList(respond, action, searchTerm = '') {
-  const projects = await searchProjects(searchTerm);
+async function showProjectList(respond, action, searchTerm = '', slackUserId = null) {
+  const filters = {};
+  if (slackUserId && action === 'edit') {
+    filters.slackUserId = slackUserId;
+  }
+  const projects = await searchProjects(searchTerm, filters);
   
   if (projects.length === 0) {
+    let message = 'No projects found';
+    if (action === 'edit' && slackUserId) {
+      message = 'No projects found where you are a member';
+    }
+    if (searchTerm) {
+      message += ` matching "${searchTerm}"`;
+    }
+    message += '.';
+    
     await respond({
       response_type: 'ephemeral',
-      text: `No projects found${searchTerm ? ` matching "${searchTerm}"` : ''}.`
+      text: message
     });
     return;
+  }
+  
+  let headerText = `*Select a project to ${action}:*`;
+  if (action === 'edit' && slackUserId) {
+    headerText = `*Select a project to ${action} (your projects only):*`;
+  }
+  if (searchTerm) {
+    headerText += ` (filtered by "${searchTerm}")`;
   }
   
   const blocks = [
@@ -484,7 +510,7 @@ async function showProjectList(respond, action, searchTerm = '') {
       type: 'section',
       text: {
         type: 'mrkdwn',
-        text: `*Select a project to ${action}:*${searchTerm ? ` (filtered by "${searchTerm}")` : ''}`
+        text: headerText
       }
     },
     { type: 'divider' }

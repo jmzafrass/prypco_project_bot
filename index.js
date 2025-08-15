@@ -59,7 +59,9 @@ const PRIORITY_VALUES = {
 const STATUS_VALUES = {
   'Not started': { emoji: '⚪' },
   'In progress': { emoji: '🔵' },
-  'Delivered': { emoji: '🟢' }
+  'Delivered': { emoji: '🟢' },
+  'Cancelled': { emoji: '❌' },
+  'Deprecated': { emoji: '⚫' }
 };
 
 const RELATED_BU_OPTIONS = [
@@ -216,6 +218,7 @@ function formatProjectForSlack(project, compact = false) {
   const description = fields['Description'] || 'No description';
   const lastUpdate = fields['Last updated'] ? new Date(fields['Last updated']).toLocaleDateString() : 'Never';
   const targetDate = fields['Target date'] ? new Date(fields['Target date']).toLocaleDateString() : null;
+  const nextMilestone = fields['Next milestone'] || '';
   
   // Get owners from the Owner(s) field (which contains names as a string)
   const owners = fields['Owner(s)'] || 'Unassigned';
@@ -270,6 +273,10 @@ function formatProjectForSlack(project, compact = false) {
     
     if (targetDate) {
       text += `\n🎯 Target: ${targetDate}`;
+    }
+    
+    if (nextMilestone) {
+      text += `\n📍 Next Milestone: ${nextMilestone}`;
     }
     
     if (relatedBU.length > 0) {
@@ -666,6 +673,18 @@ async function showCreateProjectModal(client, triggerId) {
             action_id: 'risks_input',
             multiline: true,
             placeholder: { type: 'plain_text', text: 'Enter project risks and mitigation strategies' }
+          },
+          optional: true
+        },
+        {
+          type: 'input',
+          block_id: 'next_milestone_block',
+          label: { type: 'plain_text', text: 'Next Milestone' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'next_milestone_input',
+            multiline: true,
+            placeholder: { type: 'plain_text', text: 'Describe the next milestone for this project' }
           },
           optional: true
         },
@@ -1068,6 +1087,19 @@ app.action('edit_project', async ({ ack, body, client, action }) => {
         },
         {
           type: 'input',
+          block_id: 'next_milestone_block',
+          label: { type: 'plain_text', text: 'Next Milestone' },
+          element: {
+            type: 'plain_text_input',
+            action_id: 'next_milestone_input',
+            multiline: true,
+            initial_value: fields['Next milestone'] || '',
+            placeholder: { type: 'plain_text', text: 'Describe the next milestone for this project' }
+          },
+          optional: true
+        },
+        {
+          type: 'input',
           block_id: 'target_date_block',
           label: { type: 'plain_text', text: 'Target Date' },
           element: {
@@ -1113,6 +1145,7 @@ app.view('submit_project_create', async ({ ack, body, view, client }) => {
       'Project Owners': values.owners_block?.owners_input?.selected_options?.map(o => o.value) || [], // These are record IDs for linked records
       'KPIs (how to measure success?)': values.kpis_block?.kpis_input?.value || '',
       'Risks/Blockers': values.risks_block?.risks_input?.value || '',
+      'Next milestone': values.next_milestone_block?.next_milestone_input?.value || '',
       'Last updated': new Date().toISOString().split('T')[0] // Date format YYYY-MM-DD
     };
     
@@ -1179,6 +1212,7 @@ app.view('submit_project_edit', async ({ ack, body, view, client }) => {
       'Project Owners': values.owners_block?.owners_input?.selected_options?.map(o => o.value) || [], // These are record IDs for linked records
       'KPIs (how to measure success?)': values.kpis_block?.kpis_input?.value || '',
       'Risks/Blockers': values.risks_block?.risks_input?.value || '',
+      'Next milestone': values.next_milestone_block?.next_milestone_input?.value || '',
       'Last updated': new Date().toISOString().split('T')[0] // Date format YYYY-MM-DD
     };
 
@@ -1501,7 +1535,7 @@ process.on('SIGINT', async () => {
     
     // Test if /slack/commands route exists by making a simple GET request
     console.log('🔍 Testing Slack routes...');
-    receiver.router.get('/debug-routes', (req, res) => {
+    receiver.router.get('/debug-routes', (_req, res) => {
       const routes = [];
       if (receiver.router && receiver.router.stack) {
         receiver.router.stack.forEach((layer) => {

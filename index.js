@@ -106,19 +106,28 @@ async function airtableFetch(endpoint, options = {}) {
 }
 
 async function getAllProjects(filter = null, sort = null) {
-  const params = new URLSearchParams({
-    pageSize: '100',
-    ...(filter && { filterByFormula: filter })
-  });
+  let allRecords = [];
+  let offset = null;
   
-  // Add sorting if specified
-  if (sort && sort.field) {
-    params.append('sort[0][field]', sort.field);
-    params.append('sort[0][direction]', sort.direction || 'asc');
-  }
+  do {
+    const params = new URLSearchParams({
+      pageSize: '100',
+      ...(filter && { filterByFormula: filter }),
+      ...(offset && { offset })
+    });
+    
+    // Add sorting if specified
+    if (sort && sort.field) {
+      params.append('sort[0][field]', sort.field);
+      params.append('sort[0][direction]', sort.direction || 'asc');
+    }
+    
+    const data = await airtableFetch(`${PROJECTS_TABLE_ID}?${params.toString()}`);
+    allRecords = allRecords.concat(data.records || []);
+    offset = data.offset;
+  } while (offset);
   
-  const data = await airtableFetch(`${PROJECTS_TABLE_ID}?${params.toString()}`);
-  return data.records || [];
+  return allRecords;
 }
 
 async function searchProjects(searchTerm, filters = {}) {
@@ -159,6 +168,7 @@ async function searchProjects(searchTerm, filters = {}) {
   
   // Add Slack ID filter - for filtering by current user's Slack ID
   if (filters.slackUserId) {
+    console.log('Filtering by Slack ID:', filters.slackUserId);
     filterFormulas.push(`FIND("${filters.slackUserId}", {Slack IDs})`);
   }
   
@@ -168,7 +178,9 @@ async function searchProjects(searchTerm, filters = {}) {
     : '';
   
   // Get projects and sort by target date on client side (since not all records have target date)
+  console.log('Final Airtable filter:', finalFilter);
   const projects = await getAllProjects(finalFilter);
+  console.log(`Found ${projects.length} projects after filtering`);
   
   // Sort by target date (earliest first), projects without dates go to the end
   return projects.sort((a, b) => {

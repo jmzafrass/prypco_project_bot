@@ -60,8 +60,7 @@ const STATUS_VALUES = {
   'Not started': { emoji: '⚪' },
   'In progress': { emoji: '🔵' },
   'Delivered': { emoji: '🟢' },
-  'Cancelled': { emoji: '❌' },
-  'Deprecated': { emoji: '⚫' }
+  'Cancelled / Deprecated': { emoji: '❌' }
 };
 
 const RELATED_BU_OPTIONS = [

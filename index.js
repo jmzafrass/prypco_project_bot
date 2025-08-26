@@ -1092,6 +1092,26 @@ app.action('edit_project', async ({ ack, body, client, action }) => {
   await ack();
   
   try {
+    // IMMEDIATELY open a loading modal to use trigger_id before it expires
+    const loadingView = await client.views.open({
+      trigger_id: body.trigger_id,
+      view: {
+        type: 'modal',
+        callback_id: 'edit_project_loading',
+        title: { type: 'plain_text', text: 'Loading...' },
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: '⏳ Loading project data...'
+            }
+          }
+        ]
+      }
+    });
+    
+    // NOW fetch the data after modal is open
     const project = await getProject(action.value);
     const employees = await getEmployees();
     const fields = project.fields || {};
@@ -1294,8 +1314,9 @@ app.action('edit_project', async ({ ack, body, client, action }) => {
       ]
     };
     
-    await client.views.open({
-      trigger_id: body.trigger_id,
+    // Update the loading modal with the actual edit form
+    await client.views.update({
+      view_id: loadingView.view.id,
       view: modal
     });
     

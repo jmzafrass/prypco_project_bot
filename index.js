@@ -331,8 +331,7 @@ app.command('/project', async ({ command, ack, respond, client }) => {
         break;
         
       case 'edit':
-        // Show project selection modal instead of message with buttons
-        await showEditProjectSelectionModal(client, command.trigger_id, command.user_id, searchTerm);
+        await showProjectListForEdit(respond, command.user_id, searchTerm);
         break;
         
       case 'delete':
@@ -359,87 +358,6 @@ app.command('/project', async ({ command, ack, respond, client }) => {
     });
   }
 });
-
-async function showEditProjectSelectionModal(client, triggerId, userId, searchTerm = '') {
-  try {
-    // Get projects where the user is a member
-    const projects = await searchProjects(searchTerm, { slackUserId: userId });
-    
-    if (projects.length === 0) {
-      await client.chat.postEphemeral({
-        channel: userId,
-        user: userId,
-        text: `No projects found where you are a member${searchTerm ? ` matching "${searchTerm}"` : ''}. Use \`/project create\` to create a new project.`
-      });
-      return;
-    }
-    
-    // Create options for the select menu (limit to 100 for Slack's limit)
-    const projectOptions = projects.slice(0, 100).map(project => {
-      const fields = project.fields || {};
-      const initiative = fields['Initiative'] || 'Unnamed Project';
-      const status = fields['Status'] || 'Not started';
-      const statusEmoji = STATUS_VALUES[status]?.emoji || '⚪';
-      
-      return {
-        text: { 
-          type: 'plain_text', 
-          text: `${statusEmoji} ${initiative}`.substring(0, 75) 
-        },
-        value: project.id
-      };
-    });
-    
-    await client.views.open({
-      trigger_id: triggerId,
-      view: {
-        type: 'modal',
-        callback_id: 'select_project_to_edit',
-        title: { type: 'plain_text', text: 'Select Project' },
-        submit: { type: 'plain_text', text: 'Edit' },
-        close: { type: 'plain_text', text: 'Cancel' },
-        blocks: [
-          {
-            type: 'section',
-            text: {
-              type: 'mrkdwn',
-              text: searchTerm 
-                ? `*Select a project to edit* (filtered by "${searchTerm}"):`
-                : '*Select a project to edit:*'
-            }
-          },
-          {
-            type: 'input',
-            block_id: 'project_selection',
-            label: { type: 'plain_text', text: 'Project' },
-            element: {
-              type: 'static_select',
-              action_id: 'selected_project',
-              placeholder: { type: 'plain_text', text: 'Choose a project' },
-              options: projectOptions
-            }
-          }
-        ]
-      }
-    });
-    
-    if (projects.length > 100) {
-      await client.chat.postEphemeral({
-        channel: userId,
-        user: userId,
-        text: `ℹ️ Showing first 100 of ${projects.length} projects. Use a search term to narrow down results.`
-      });
-    }
-    
-  } catch (error) {
-    console.error('Error showing edit selection modal:', error);
-    await client.chat.postEphemeral({
-      channel: userId,
-      user: userId,
-      text: `❌ Error loading projects: ${error.message}`
-    });
-  }
-}
 
 async function showFilterModal(client, triggerId, initialSearch = '') {
   const employees = await getEmployees();
@@ -1170,52 +1088,11 @@ app.view('filter_projects_modal', async ({ ack, body, view, client }) => {
 
 // ===== ACTION HANDLERS =====
 
-app.action('edit_project', async ({ ack, body, client, action, respond }) => {
+app.action('edit_project', async ({ ack, body, client, action }) => {
   await ack();
   
   try {
-    // Since we can't use the trigger_id from button clicks in messages,
-    // we'll provide instructions to use the slash command
-    await respond({
-      response_type: 'ephemeral',
-      replace_original: false,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: `To edit this project, please use the slash command:\n\`/project edit\`\n\nThis will open a modal where you can select and edit the project.`
-          }
-        },
-        {
-          type: 'context',
-          elements: [
-            {
-              type: 'mrkdwn',
-              text: `_Project ID: ${action.value}_`
-            }
-          ]
-        }
-      ]
-    });
-    
-  } catch (error) {
-    console.error('Edit modal error:', error);
-    await client.chat.postEphemeral({
-      channel: body.user.id,
-      user: body.user.id,
-      text: `❌ Error opening edit modal: ${error.message}`
-    });
-  }
-});
-
-app.view('select_project_to_edit', async ({ ack, body, view, client }) => {
-  await ack();
-  
-  const selectedProjectId = view.state.values.project_selection.selected_project.selected_option.value;
-  
-  try {
-    const project = await getProject(selectedProjectId);
+    const project = await getProject(action.value);
     const employees = await getEmployees();
     const fields = project.fields || {};
     
@@ -1227,9 +1104,13 @@ app.view('select_project_to_edit', async ({ ack, body, view, client }) => {
     
     // Use the correct linked record field name "Project Owners"
     const currentOwnerIds = fields['Project Owners'] || [];
+    console.log('Project Owners field (linked records):', currentOwnerIds);
+    console.log('Type:', Array.isArray(currentOwnerIds) ? 'array' : typeof currentOwnerIds);
+    
     const selectedOwners = ownerOptions.filter(opt => 
       Array.isArray(currentOwnerIds) ? currentOwnerIds.includes(opt.value) : false
     );
+    console.log('Selected owners for modal:', selectedOwners);
     
     // Create BU options
     const buOptions = RELATED_BU_OPTIONS.map(bu => ({
@@ -1253,11 +1134,10 @@ app.view('select_project_to_edit', async ({ ack, body, view, client }) => {
       currentOKRs.includes(opt.value)
     );
     
-    // Open the edit modal with the project data
-    const editModal = {
+    const modal = {
       type: 'modal',
       callback_id: 'submit_project_edit',
-      private_metadata: selectedProjectId,
+      private_metadata: action.value,
       title: { type: 'plain_text', text: 'Edit Project' },
       submit: { type: 'plain_text', text: 'Save Changes' },
       close: { type: 'plain_text', text: 'Cancel' },
@@ -1414,18 +1294,17 @@ app.view('select_project_to_edit', async ({ ack, body, view, client }) => {
       ]
     };
     
-    // Update the existing view with the edit form
-    await client.views.update({
-      view_id: body.view.id,
-      view: editModal
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: modal
     });
     
   } catch (error) {
-    console.error('Error loading project for edit:', error);
+    console.error('Edit modal error:', error);
     await client.chat.postEphemeral({
       channel: body.user.id,
       user: body.user.id,
-      text: `❌ Error loading project: ${error.message}`
+      text: `❌ Error opening edit modal: ${error.message}`
     });
   }
 });
@@ -1759,7 +1638,28 @@ app.action('projects_prev_page', async ({ ack, body, action, client }) => {
   }
 });
 
-// Edit projects pagination handlers - removed as they're no longer needed with the new modal approach
+// Edit projects pagination handlers
+app.action('edit_projects_next_page', async ({ ack, body, action, client }) => {
+  await ack();
+  
+  try {
+    const { searchTerm, slackUserId, page } = JSON.parse(action.value);
+    await showEditProjectsPage(client, slackUserId, searchTerm, page);
+  } catch (error) {
+    console.error('Edit projects next page error:', error);
+  }
+});
+
+app.action('edit_projects_prev_page', async ({ ack, body, action, client }) => {
+  await ack();
+  
+  try {
+    const { searchTerm, slackUserId, page } = JSON.parse(action.value);
+    await showEditProjectsPage(client, slackUserId, searchTerm, page);
+  } catch (error) {
+    console.error('Edit projects previous page error:', error);
+  }
+});
 
 async function showEditProjectsPage(client, userId, searchTerm, currentPage) {
   try {

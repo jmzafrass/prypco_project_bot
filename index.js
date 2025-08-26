@@ -360,6 +360,26 @@ app.command('/project', async ({ command, ack, respond, client }) => {
 });
 
 async function showFilterModal(client, triggerId, initialSearch = '') {
+  // FIRST: Open a loading modal immediately to use trigger_id before it expires
+  const loadingView = await client.views.open({
+    trigger_id: triggerId,
+    view: {
+      type: 'modal',
+      callback_id: 'filter_loading',
+      title: { type: 'plain_text', text: 'Loading...' },
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '⏳ Loading filter options...'
+          }
+        }
+      ]
+    }
+  });
+  
+  // NOW fetch the employees data
   const employees = await getEmployees();
   const ownerOptions = [
     { text: { type: 'plain_text', text: 'All Owners' }, value: 'all' },
@@ -385,8 +405,9 @@ async function showFilterModal(client, triggerId, initialSearch = '') {
     }))
   ];
   
-  await client.views.open({
-    trigger_id: triggerId,
+  // Update the loading modal with the actual filter form
+  await client.views.update({
+    view_id: loadingView.view.id,
     view: {
       type: 'modal',
       callback_id: 'filter_projects_modal',
@@ -715,6 +736,26 @@ async function showProjectList(respond, action, searchTerm = '', slackUserId = n
 }
 
 async function showCreateProjectModal(client, triggerId) {
+  // FIRST: Open a loading modal immediately
+  const loadingView = await client.views.open({
+    trigger_id: triggerId,
+    view: {
+      type: 'modal',
+      callback_id: 'create_loading',
+      title: { type: 'plain_text', text: 'Loading...' },
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: '⏳ Loading form...'
+          }
+        }
+      ]
+    }
+  });
+  
+  // NOW fetch the employees data
   const employees = await getEmployees();
   const ownerOptions = employees.map(emp => ({
     text: { type: 'plain_text', text: emp.fields['Name'] || 'Unknown' },
@@ -731,8 +772,9 @@ async function showCreateProjectModal(client, triggerId) {
     value: okr
   }));
   
-  await client.views.open({
-    trigger_id: triggerId,
+  // Update the loading modal with the actual create form
+  await client.views.update({
+    view_id: loadingView.view.id,
     view: {
       type: 'modal',
       callback_id: 'submit_project_create',

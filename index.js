@@ -636,10 +636,10 @@ async function showProjectListForEdit(respond, userId, searchTerm = '') {
     }
     
     await respond({
-      response_type: 'in_channel',
+      response_type: 'ephemeral',
       blocks
     });
-    
+
   } catch (error) {
     console.error('Edit project list error:', error);
     await respond({
@@ -1113,11 +1113,12 @@ app.view('filter_projects_modal', async ({ ack, body, view, client }) => {
       }
     }
     
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
       channel: body.user.id,
+      user: body.user.id,
       blocks
     });
-    
+
   } catch (error) {
     console.error('Filter error:', error);
     await client.chat.postEphemeral({
@@ -1400,8 +1401,9 @@ app.view('submit_project_create', async ({ ack, body, view, client }) => {
     
     const newProject = await createProject(projectFields);
     
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
       channel: body.user.id,
+      user: body.user.id,
       blocks: [
         {
           type: 'section',
@@ -1467,8 +1469,9 @@ app.view('submit_project_edit', async ({ ack, body, view, client }) => {
     
     await updateProject(recordId, updatedFields);
     
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
       channel: body.user.id,
+      user: body.user.id,
       blocks: [
         {
           type: 'section',
@@ -1505,8 +1508,9 @@ app.action('delete_project', async ({ ack, body, action, client }) => {
   try {
     await deleteProject(action.value);
     
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
       channel: body.user.id,
+      user: body.user.id,
       blocks: [
         {
           type: 'section',
@@ -1664,11 +1668,12 @@ async function showProjectsPage(client, userId, filters, currentPage) {
       }
     }
     
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
       channel: userId,
+      user: userId,
       blocks
     });
-    
+
   } catch (error) {
     console.error('Pagination error:', error);
     await client.chat.postEphemeral({
@@ -1851,11 +1856,12 @@ async function showEditProjectsPage(client, userId, searchTerm, currentPage) {
       }
     }
     
-    await client.chat.postMessage({
+    await client.chat.postEphemeral({
       channel: userId,
+      user: userId,
       blocks
     });
-    
+
   } catch (error) {
     console.error('Edit projects pagination error:', error);
     await client.chat.postEphemeral({
